@@ -57,7 +57,9 @@ jobs:
         run: |
           cmake -B orbiter/build -S orbiter `
             -A ${{ matrix.arch }} `
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DORBITER_BUILD_D3D9CLIENT=OFF `
+            -DORBITER_MAKE_DOC=OFF
 
       - name: Build StateSnap
         shell: pwsh
