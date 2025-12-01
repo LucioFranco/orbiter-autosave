@@ -60,7 +60,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DORBITER_BUILD_D3D9CLIENT=OFF `
             -DORBITER_MAKE_DOC=OFF `
-            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" `
+            "-DHTML_HELP_LIBRARY=${{ github.workspace }}/orbiter/Extern/Htmlhelp/lib-x64/Htmlhelp.Lib"
 
       - name: Build StateSnap
         shell: pwsh
