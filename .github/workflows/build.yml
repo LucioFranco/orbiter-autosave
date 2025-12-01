@@ -1,0 +1,140 @@
+name: Build StateSnap
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    strategy:
+      matrix:
+        arch: [x64]
+        build_type: [Release]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout Orbiter SDK headers
+        uses: actions/checkout@v4
+        with:
+          repository: orbitersim/orbiter
+          path: orbiter
+          sparse-checkout: |
+            Orbitersdk/include
+            Src/Orbitersdk
+
+      - name: Setup CMake
+        uses: lukka/get-cmake@latest
+
+      - name: Create SDK stub library
+        shell: pwsh
+        run: |
+          # Create a stub for the Orbitersdk library that provides necessary symbols
+          # The real InitLib is provided by Orbiter.exe at runtime
+          $stubDir = "orbiter/sdk-stub"
+          New-Item -ItemType Directory -Force -Path $stubDir
+
+          @"
+          // Stub implementation for standalone builds
+          // Real implementation is provided by Orbiter.exe at runtime
+          #include <windows.h>
+
+          extern "C" {
+              __declspec(dllexport) void InitLib(HINSTANCE) {}
+              __declspec(dllexport) int Date2Int(char*) { return 0; }
+          }
+
+          #define DLLCLBK extern "C" __declspec(dllexport)
+          #define OAPIFUNC
+
+          BOOL WINAPI DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
+              switch (ul_reason_for_call) {
+              case DLL_PROCESS_ATTACH:
+              case DLL_PROCESS_DETACH:
+                  break;
+              }
+              return TRUE;
+          }
+
+          int oapiGetModuleVersion() {
+              return 0;
+          }
+
+          DLLCLBK int GetModuleVersion(void) {
+              return oapiGetModuleVersion();
+          }
+          "@ | Out-File -FilePath "$stubDir/Orbitersdk.cpp" -Encoding UTF8
+
+          @"
+          cmake_minimum_required(VERSION 3.20)
+          project(Orbitersdk)
+          add_library(Orbitersdk STATIC Orbitersdk.cpp)
+          target_include_directories(Orbitersdk PUBLIC `${CMAKE_CURRENT_SOURCE_DIR}/../Orbitersdk/include)
+          "@ | Out-File -FilePath "$stubDir/CMakeLists.txt" -Encoding UTF8
+
+      - name: Build SDK stub library
+        shell: pwsh
+        run: |
+          cmake -B orbiter/sdk-stub/build -S orbiter/sdk-stub `
+            -A ${{ matrix.arch }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          cmake --build orbiter/sdk-stub/build --config ${{ matrix.build_type }}
+
+      - name: Configure StateSnap
+        shell: pwsh
+        run: |
+          cmake -B build -S . `
+            -A ${{ matrix.arch }} `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DSTATESNAP_STANDALONE=ON `
+            -DORBITER_SDK_DIR="${{ github.workspace }}/orbiter/Orbitersdk" `
+            -DORBITER_SDK_LIB="${{ github.workspace }}/orbiter/sdk-stub/build/${{ matrix.build_type }}/Orbitersdk.lib"
+
+      - name: Build StateSnap
+        run: cmake --build build --config ${{ matrix.build_type }}
+
+      - name: Prepare release package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release/Modules/Plugin
+          Copy-Item build/Modules/Plugin/StateSnap.dll release/Modules/Plugin/
+          Copy-Item LICENSE release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StateSnap-${{ matrix.arch }}-${{ matrix.build_type }}
+          path: release/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: StateSnap-x64-Release
+          path: release
+
+      - name: Create zip archive
+        run: |
+          cd release
+          zip -r ../StateSnap.zip .
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: StateSnap.zip
+          generate_release_notes: true
