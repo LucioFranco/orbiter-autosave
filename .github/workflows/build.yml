@@ -36,7 +36,11 @@ jobs:
       - name: Copy StateSnap to Orbiter Extern
         shell: pwsh
         run: |
-          Copy-Item -Path StateSnap/* -Destination orbiter/Extern/StateSnap -Recurse -Force
+          # Remove existing StateSnap if present
+          if (Test-Path orbiter/Extern/StateSnap) {
+            Remove-Item -Path orbiter/Extern/StateSnap -Recurse -Force
+          }
+          Copy-Item -Path StateSnap -Destination orbiter/Extern/StateSnap -Recurse
 
       - name: Add StateSnap to Orbiter build
         shell: pwsh
