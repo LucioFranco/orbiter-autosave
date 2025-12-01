@@ -8,27 +8,19 @@ StateSnap is a plugin module for Orbiter Space Flight Simulator that provides au
 
 ## Build System
 
-This is a Windows C++ DLL project using CMake and the Orbiter SDK.
+This project must be built as part of the Orbiter source tree (API symbols are exported from Orbiter.exe).
 
-### Building with Orbiter source tree
 ```bash
-# From Orbiter root, add this project to Extern/ and include in CMakeLists.txt
+# Copy to Orbiter/Extern/StateSnap
+# Add to Orbiter/Extern/CMakeLists.txt:
+#   add_subdirectory(StateSnap)
+
+cd orbiter
 cmake -B build -S .
-cmake --build build --config Release
+cmake --build build --config Release --target StateSnap
 ```
 
-### Building standalone
-```bash
-cmake -B build -S . -DSTATESNAP_STANDALONE=ON -DORBITER_SDK_DIR=<path-to-orbiter-sdk>
-cmake --build build --config Release
-```
-
-Output: `build/Modules/Plugin/StateSnap.dll`
-
-### Dependencies
-- Orbiter SDK headers (`Orbitersdk.h`)
-- Windows API and common controls (`commctrl.h`)
-- Resource file `Resources.rc` defines the control dialog
+Output: `build/Modules/Plugin/Release/StateSnap.dll`
 
 ## Architecture
 

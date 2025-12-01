@@ -21,92 +21,51 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          path: StateSnap
 
-      - name: Checkout Orbiter SDK headers
+      - name: Checkout Orbiter
         uses: actions/checkout@v4
         with:
           repository: orbitersim/orbiter
           path: orbiter
-          sparse-checkout: |
-            Orbitersdk/include
-            Src/Orbitersdk
 
       - name: Setup CMake
         uses: lukka/get-cmake@latest
 
-      - name: Create SDK stub library
+      - name: Copy StateSnap to Orbiter Extern
         shell: pwsh
         run: |
-          # Create a stub for the Orbitersdk library that provides necessary symbols
-          # The real InitLib is provided by Orbiter.exe at runtime
-          $stubDir = "orbiter/sdk-stub"
-          New-Item -ItemType Directory -Force -Path $stubDir
+          Copy-Item -Path StateSnap/* -Destination orbiter/Extern/StateSnap -Recurse -Force
 
-          @"
-          // Stub implementation for standalone builds
-          // Real implementation is provided by Orbiter.exe at runtime
-          #include <windows.h>
-
-          extern "C" {
-              __declspec(dllexport) void InitLib(HINSTANCE) {}
-              __declspec(dllexport) int Date2Int(char*) { return 0; }
-          }
-
-          #define DLLCLBK extern "C" __declspec(dllexport)
-          #define OAPIFUNC
-
-          BOOL WINAPI DllMain(HINSTANCE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
-              switch (ul_reason_for_call) {
-              case DLL_PROCESS_ATTACH:
-              case DLL_PROCESS_DETACH:
-                  break;
-              }
-              return TRUE;
-          }
-
-          int oapiGetModuleVersion() {
-              return 0;
-          }
-
-          DLLCLBK int GetModuleVersion(void) {
-              return oapiGetModuleVersion();
-          }
-          "@ | Out-File -FilePath "$stubDir/Orbitersdk.cpp" -Encoding UTF8
-
-          @"
-          cmake_minimum_required(VERSION 3.20)
-          project(Orbitersdk)
-          add_library(Orbitersdk STATIC Orbitersdk.cpp)
-          target_include_directories(Orbitersdk PUBLIC `${CMAKE_CURRENT_SOURCE_DIR}/../Orbitersdk/include)
-          "@ | Out-File -FilePath "$stubDir/CMakeLists.txt" -Encoding UTF8
-
-      - name: Build SDK stub library
+      - name: Add StateSnap to Orbiter build
         shell: pwsh
         run: |
-          cmake -B orbiter/sdk-stub/build -S orbiter/sdk-stub `
+          # Append StateSnap to Extern CMakeLists.txt if not already present
+          $externCMake = "orbiter/Extern/CMakeLists.txt"
+          $content = Get-Content $externCMake -Raw
+          if ($content -notmatch "add_subdirectory\(StateSnap\)") {
+            Add-Content $externCMake "`nadd_subdirectory(StateSnap)"
+          }
+
+      - name: Configure Orbiter with StateSnap
+        shell: pwsh
+        run: |
+          cmake -B orbiter/build -S orbiter `
             -A ${{ matrix.arch }} `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-          cmake --build orbiter/sdk-stub/build --config ${{ matrix.build_type }}
-
-      - name: Configure StateSnap
-        shell: pwsh
-        run: |
-          cmake -B build -S . `
-            -A ${{ matrix.arch }} `
-            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -DSTATESNAP_STANDALONE=ON `
-            -DORBITER_SDK_DIR="${{ github.workspace }}/orbiter/Orbitersdk" `
-            -DORBITER_SDK_LIB="${{ github.workspace }}/orbiter/sdk-stub/build/${{ matrix.build_type }}/Orbitersdk.lib"
 
       - name: Build StateSnap
-        run: cmake --build build --config ${{ matrix.build_type }}
+        shell: pwsh
+        run: |
+          cmake --build orbiter/build --config ${{ matrix.build_type }} --target StateSnap
 
       - name: Prepare release package
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path release/Modules/Plugin
-          Copy-Item build/Modules/Plugin/StateSnap.dll release/Modules/Plugin/
-          Copy-Item LICENSE release/
+          Copy-Item orbiter/build/Modules/Plugin/${{ matrix.build_type }}/StateSnap.dll release/Modules/Plugin/
+          Copy-Item StateSnap/LICENSE release/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
