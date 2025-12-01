@@ -24,6 +24,9 @@
 #include <commctrl.h>
 #include <cstdio>
 
+// Dialog handle from StateSnap.cpp
+extern HWND g_hDlg;
+
 // Store module pointer for dialog callbacks
 static StateSnap* g_dlgModule = nullptr;
 
@@ -151,6 +154,7 @@ INT_PTR CALLBACK StateSnapDlgProc(HWND hDlg, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_DESTROY:
         KillTimer(hDlg, IDT_UPDATE_TIMER);
         g_dlgModule = nullptr;
+        g_hDlg = NULL;  // Reset so dialog can be reopened
         return TRUE;
     }
 

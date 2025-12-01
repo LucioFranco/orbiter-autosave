@@ -30,7 +30,7 @@
 // Global variables
 static StateSnap* g_module = nullptr;
 static DWORD g_dwCmd = 0;
-static HWND g_hDlg = NULL;
+HWND g_hDlg = NULL;  // Non-static so StateSnapDlg.cpp can reset it
 
 // Config file name
 static const char* CFGFILE = "StateSnap.cfg";
