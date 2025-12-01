@@ -71,9 +71,11 @@ jobs:
       - name: Prepare release package
         shell: pwsh
         run: |
+          # Create Orbiter-compatible folder structure
           New-Item -ItemType Directory -Force -Path release/Modules/Plugin
           Copy-Item orbiter/build/Modules/Plugin/${{ matrix.build_type }}/StateSnap.dll release/Modules/Plugin/
           Copy-Item StateSnap/LICENSE release/
+          Copy-Item StateSnap/README.md release/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
